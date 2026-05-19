@@ -61,15 +61,19 @@ if [ "\$on_battery" -eq 1 ]; then
     sleep 3600
     on_battery_still=\$(pmset -g ps | grep -c "Battery Power")
     if [ "\$on_battery_still" -eq 1 ]; then
-        if [ -f "\$LOCK_FILE" ]; then
+        if [ -f "\$LOCK_FILE" ] && grep -q "type=manual" "\$LOCK_FILE"; then
             osascript -e 'display notification "拔电1小时，但手动锁存在，保持禁用睡眠" with title "防睡眠开关"'
         else
             sudo pmset -a disablesleep 0
+            rm -f "\$LOCK_FILE"
             osascript -e 'display notification "已恢复睡眠" with title "防睡眠开关"'
         fi
     fi
 else
     sudo pmset -a disablesleep 1
+    echo "type=auto" > "\$LOCK_FILE"
+    echo "time=\$(date '+%Y-%m-%d %H:%M:%S')" >> "\$LOCK_FILE"
+    echo "reason=插电自动禁用" >> "\$LOCK_FILE"
     osascript -e 'display notification "已禁用睡眠" with title "防睡眠开关"'
 fi
 INNER
@@ -141,9 +145,18 @@ do_status() {
     echo "当前电源: $(pmset -g ps | head -1)"
     echo "防睡眠:   $(pmset -g | grep disablesleep)"
     if [ -f "$LOCK_FILE" ]; then
-        echo "手动锁:   存在（手动禁止休眠中，自动恢复不会生效）"
+        echo "锁文件:   存在"
+        cat "$LOCK_FILE" | while IFS='=' read -r key val; do
+            case "$key" in
+                type)       echo "  类型:   $val" ;;
+                time)       echo "  时间:   $val" ;;
+                duration)   echo "  时长:   $val" ;;
+                recover_at) echo "  恢复于: $val" ;;
+                reason)     echo "  原因:   $val" ;;
+            esac
+        done
     else
-        echo "手动锁:   不存在"
+        echo "锁文件:   不存在"
     fi
 }
 
